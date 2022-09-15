@@ -6,7 +6,7 @@ from transformers import AutoFeatureExtractor, AutoProcessor, AutoTokenizer, Pre
 
 
 def detect_preprocessor_from_model_name(model_name: str) -> str:
-    for preprocessor_class in [AutoFeatureExtractor, AutoProcessor, AutoTokenizer]:
+    for preprocessor_class in [AutoTokenizer]:
         try:
             _ = preprocessor_class.from_pretrained(model_name)
             return preprocessor_class
@@ -40,9 +40,9 @@ class EnsembleConfig(PretrainedConfig):
             self.auto_class = getattr(transformers, auto_class)
         except AttributeError:
             raise ImportError(f"Failed to import `{auto_class}` from Hugging Face transformers.")
-        preprocessor_classes = check_modalities(model_names)
-        if len(preprocessor_classes) > 1:
-            raise ValueError("Cannot ensemble models of different modalities.")
+        # preprocessor_classes = check_modalities(model_names)
+        # if len(preprocessor_classes) > 1:
+        #     raise ValueError("Cannot ensemble models of different modalities.")
         if weights is not None:
             if len(weights) != num_models:
                 raise ValueError(
@@ -54,5 +54,5 @@ class EnsembleConfig(PretrainedConfig):
         else:
             self.weights = [1 / num_models for _ in range(num_models)]
         self.model_names = model_names
-        self.preprocessor_class = preprocessor_classes.pop()
+        # self.preprocessor_class = preprocessor_classes.pop()
         super().__init__(*args, **kwargs)

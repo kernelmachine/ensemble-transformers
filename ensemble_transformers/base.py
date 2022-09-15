@@ -3,6 +3,7 @@ from typing import List, Optional, Union
 
 import torch
 from torch import nn
+from tqdm.auto import tqdm
 from transformers import PreTrainedModel
 
 from .config import EnsembleConfig
@@ -15,10 +16,12 @@ class EnsembleBaseModel(PreTrainedModel):
         super().__init__(config)
         self.num_models = len(config.model_names)
         self.devices = ["cpu" for _ in range(self.num_models)]
-        self.preprocessors = []
+        # self.preprocessors = []
         self.models = nn.ModuleList()
-        for model_name in config.model_names:
-            self.preprocessors.append(config.preprocessor_class.from_pretrained(model_name))
+        pbar = tqdm(config.model_names)
+        pbar.set_description('loading models...')
+        for model_name in pbar:
+            # self.preprocessors.append(config.preprocessor_class.from_pretrained(model_name))
             self.models.append(config.auto_class.from_pretrained(model_name, *args, **kwargs))
 
     def to(self, device: Union[str, torch.device]) -> None:
@@ -26,8 +29,8 @@ class EnsembleBaseModel(PreTrainedModel):
         self.devices = [device for _ in range(self.num_models)]
 
     def to_multiple(self, devices: List[Union[str, torch.device]]) -> None:
-        if len(devices) != self.num_models:
-            raise ValueError(f"Expected {self.num_models} devices, but got {len(devices)} instead.")
+        # if len(devices) != self.num_models:
+            # raise ValueError(f"Expected {self.num_models} devices, but got {len(devices)} instead.")
         for i, (model, device) in enumerate(zip(self.models, devices)):
             model.to(device)
             self.devices[i] = device
