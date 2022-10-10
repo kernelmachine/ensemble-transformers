@@ -157,14 +157,31 @@ def main(cluster, file, seed=42, precomputed_prior=None):
                 desc=f"Grouping texts in chunks of {block_size}",
             )
 
+    def pairwise_distance(data1, data2, device=torch.device('cpu'), tqdm_flag=True):
+        # if tqdm_flag:
+            # print(f'device is :{device}')
+        
+        # transfer to device
+        data1, data2 = data1.to(device), data2.to(device)
 
+        # N*1*M
+        A = data1.unsqueeze(dim=1)
+
+        # 1*N*M
+        B = data2.unsqueeze(dim=0)
+
+        dis = (A - B) ** 2.0
+        # return N*N matrix for pairwise distance
+        dis = dis.sum(dim=-1).squeeze()
+        return dis
     def generate_context_clusters(examples, tokenizer, vectorizer, kmeans):        
         # c_ = clusters[id]
         clusters = []
         for i in range(50):
             decoded_text = [tokenizer.decode(x[:i]) for x in examples['input_ids']]
             vectorized_text = vectorizer.transform(decoded_text)
-            c_ = kmeans.predict(torch.from_numpy(vectorized_text))
+            c_, dists =  kmeans.predict(torch.from_numpy(vectorized_text), return_distances=True)
+            probs = torch.nn.functional.softmax(dists, dim=-1)
             clusters.append(c_.unsqueeze(1))
         examples['context_clusters'] = torch.cat(clusters, 1).numpy()
         # c_ = [cached_clusters.get(domain[i], backup_clusters[i]) for i in range(len(domain))]
@@ -208,7 +225,6 @@ def main(cluster, file, seed=42, precomputed_prior=None):
     models = {i : f'/private/home/suching/cluster/models/EXPERIMENT=mod_MODEL=facebook-opt-125m_GPUS=2_NODES=1_CLUSTER={i}/checkpoint-10000/' for i in range(8)}
 
     # modes = {0: "gpt2", 1: "lvwerra/gpt2-imdb"}
-    models[0] = "facebook/opt-125m"
     torch.distributed.barrier()
 
 
@@ -302,7 +318,7 @@ if __name__ == '__main__':
     #precomputed_prior =  [6.00246925e-01, 3.04175785e-02, 1.23715056e-01, 8.35959456e-02, 3.98626546e-03, 1.17209272e-02, 1.46314733e-01, 2.58234944e-06]
     #precomputed_prior = [0.02394467, 0.87081061, 0.02492725, 0.01586126, 0.00966152, 0.02538445, 0.01510562, 0.01430462]
     # precomputed_prior = [1.0, 0,0,0,0,0,0,0]
-    main(cluster=False, 
+    main(cluster=True, 
         file=args.file,
         seed=24,
         precomputed_prior=args.precomputed_prior)

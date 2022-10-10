@@ -112,7 +112,7 @@ def compute_nll_loss(log_probs, labels):
     loss = torch.nn.NLLLoss(reduction='mean')
     shift_probs = log_probs[:, :-1, :].contiguous()
     shift_labels = labels[..., 1:].contiguous().to(shift_probs.device)
-    return torch.tensor(loss(shift_probs.view(-1, shift_probs.shape[-1]), shift_labels.view(-1))).unsqueeze(0)
+    return loss(shift_probs.view(-1, shift_probs.shape[-1]), shift_labels.view(-1)).unsqueeze(0)
 
 class EnsembleModelForCausalLM(EnsembleBaseModel):
 
@@ -192,12 +192,15 @@ class EnsembleModelForCausalLM(EnsembleBaseModel):
             del beginning_weights
             probs = torch.einsum("ebsv,ebsv->bsv", (weights, model_probs))
             probs.log_()
+        for i in outs:
+            del i
+        del model_probs
 
         if context_clusters is not None:
             loss = None
             if labels is not None:
                 # Shift so that tokens < n predict n
-                shift_logits = probs[..., :-1, :].contiguous()
+                shift_logits = logits[..., :-1, :].contiguous()
                 shift_labels = labels[..., 1:].contiguous()
                 # Flatten the tokens
                 loss_fct = torch.nn.CrossEntropyLoss()
@@ -212,9 +215,11 @@ class EnsembleModelForCausalLM(EnsembleBaseModel):
         else:
             if labels is not None:
                 l = compute_nll_loss(probs, labels)
-                qs = gather_target_probs(weights[torch.distributed.get_rank(), :, :,:].squeeze(0), labels.to(out.device))
+                if labels.shape[0] == 1:
+                    qs = gather_target_probs(weights[torch.distributed.get_rank(), :, :,:],  labels.to(out.device)).squeeze(0)
+                else:
+                    qs = gather_target_probs(weights[torch.distributed.get_rank(), :, :,:].squeeze(0), labels.to(out.device).squeeze(0))
                 filtered_weights_ = gather_across_gpus(qs, model.device, world_size).reshape(world_size, weights.shape[1], -1)
-    
                 return {"loss": l,
                         "probs": probs,
                         "expert_probs": filtered_weights_.mean(-1) 
