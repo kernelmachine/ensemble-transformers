@@ -33,11 +33,11 @@ def load_model(path_to_model):
     return out
         
     
-def main(cluster, context="", priors=None, seed=0):
+def main(cluster, context="", priors=None, num_clusters=2, seed=0):
     torch.manual_seed(seed)
     random.seed(seed)
     np.random.seed(seed)
-    models = {i : f'/private/home/suching/cluster/models/EXPERIMENT=mod_MODEL=facebook-opt-125m_GPUS=2_NODES=1_CLUSTER={i}/checkpoint-10000/' for i in range(8)}
+    models = {i : f'/private/home/suching/cluster/models/EXPERIMENT=mod_MODEL=facebook-opt-125m_GPUS=16_NODES=2_TAG=cbtm_NUM_CLUSTERS={num_clusters}_CLUSTER={i}/checkpoint-10000/' for i in range(num_clusters)}
     tokenizer = AutoTokenizer.from_pretrained(models[torch.distributed.get_rank()], use_fast=False)
     ensemble = EnsembleModelForCausalLM.from_multiple_pretrained(models[torch.distributed.get_rank()])
     ensemble.to_multiple([f"cuda:{torch.distributed.get_rank()}"])
@@ -71,9 +71,15 @@ def main(cluster, context="", priors=None, seed=0):
         print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 
 if __name__ == '__main__':
-    initialize_slurm_distributed(8, master_port=29500)
+   # initialize_slurm_distributed(2, master_port=29500)
     # priors = [1/8] * 8
     # COVID19-TWEETS
-    priors =[0.04015719, 0.02896253, 0.26695506, 0.27616504, 0.01892541, 0.17184799,  0.09064946, 0.10633733]
-    main(cluster=False, context="@", priors=priors, seed=4)
+ #   priors =[0.04015719, 0.02896253, 0.26695506, 0.27616504, 0.01892541, 0.17184799,  0.09064946, 0.10633733]
+  
+    init_method= "tcp://{host}:{port}".format(
+                    host=os.environ['MASTER_ADDR'],
+                            port=os.environ['MASTER_PORT'],
+                                )
+    torch.distributed.init_process_group(backend="nccl", init_method=init_method, world_size=2, rank=int(os.environ['SLURM_PROCID']))
+    main(cluster=False, context="@", priors=[1.0, 0.0], seed=4, num_clusters=2)
     

@@ -385,9 +385,8 @@ class EnsembleModelForCausalLM(EnsembleBaseModel):
                     break
 
             # prepare model inputs
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-            if vectorizer is not None:
-                model_inputs = cluster(model_inputs, tokenizer, vectorizer, kmeans)
+            model_inputs = self.models[0].prepare_inputs_for_generation(input_ids, **model_kwargs)
+
             # forward pass to get next token
             outputs = self(
                 **model_inputs,
@@ -434,6 +433,7 @@ class EnsembleModelForCausalLM(EnsembleBaseModel):
                 next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
             else:
                 next_tokens = torch.multinomial(torch.exp(next_token_scores), num_samples=1).squeeze(1)
+            print(next_tokens)
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:
