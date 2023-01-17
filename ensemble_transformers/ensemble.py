@@ -142,7 +142,6 @@ class EnsembleModelForCausalLM(EnsembleBaseModel):
             input_ids = input_ids.to(model.device)
             if attention_mask is not None:
                 attention_mask = attention_mask.to(model.device)
-
             outputs = model.model.decoder(
                     input_ids=input_ids,
                     attention_mask=attention_mask,
@@ -154,6 +153,7 @@ class EnsembleModelForCausalLM(EnsembleBaseModel):
                     output_hidden_states=output_hidden_states,
                     return_dict=return_dict,
                 )
+            
             logits = model.lm_head(outputs[0]).contiguous()
 
             if context_clusters is not None:
@@ -164,24 +164,14 @@ class EnsembleModelForCausalLM(EnsembleBaseModel):
             outs.append(out.unsqueeze(0))
     
         
-        
         torch.distributed.barrier()
         world_size = torch.distributed.get_world_size()
-
-
-        # per_model_loss = compute_nll_loss(out.log(), labels)
-        # model_losses = gather_across_gpus(per_model_loss, model.device, world_size)
-    
         model_probs = gather_across_gpus(outs[0], model.device, world_size)
 
-        # qs = gather_target_probs(model_probs[torch.distributed.get_rank(), :, :,:].squeeze(0), labels.to(out.device))
-        # filtered_model_probs = gather_across_gpus(qs, model.device, world_size).reshape(world_size, model_probs.shape[1], -1)
-
-
+        
 
         # Logits ensemble
         if context_clusters is not None:
-            # logits = model_probs[context_clusters, :,:,:].squeeze(0)
             extend_to_dim = input_ids.shape[1] - context_clusters.shape[1]
             context_clusters = torch.cat([context_clusters, context_clusters[:,-1].unsqueeze(1).repeat(1,extend_to_dim)], 1).repeat(model_probs.shape[-1],1,1).transpose(0,2).transpose(0,1)
             logits = model_probs.gather(dim=0, index=context_clusters.unsqueeze(0).to(model_probs.device)).squeeze(0)
@@ -386,7 +376,6 @@ class EnsembleModelForCausalLM(EnsembleBaseModel):
 
             # prepare model inputs
             model_inputs = self.models[0].prepare_inputs_for_generation(input_ids, **model_kwargs)
-
             # forward pass to get next token
             outputs = self(
                 **model_inputs,
@@ -395,7 +384,7 @@ class EnsembleModelForCausalLM(EnsembleBaseModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
-
+            
             if synced_gpus and this_peer_finished:
                 cur_len = cur_len + 1
                 continue  # don't waste resources running the code we don't need
@@ -433,7 +422,6 @@ class EnsembleModelForCausalLM(EnsembleBaseModel):
                 next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
             else:
                 next_tokens = torch.multinomial(torch.exp(next_token_scores), num_samples=1).squeeze(1)
-            print(next_tokens)
 
             # finished sentences should have their next token be a padding token
             if eos_token_id is not None:

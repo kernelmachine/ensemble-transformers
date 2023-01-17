@@ -13,11 +13,12 @@ if [ $SLURM == "True" ]; then
 
     if [ $NNODES == "1" ]; then
         RANDOM_INT=$(shuf -i 1024-65000 -n 1)
-        PORT=$(($RANDOM+$SLURM_PROCID))
+        PORT=$(($RANDOM))
         C10_PORT_PHRASE="--master_port $PORT"
     else
-        C10_PORT_PHRASE="--master_port 56000"
+        C10_PORT_PHRASE="--master_port 29500"
     fi;
+    echo $SLURM_PROCID
 
     export LAUNCHER=" \
         torchrun \
